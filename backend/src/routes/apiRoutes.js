@@ -3,13 +3,19 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const validateRequest = require('../middleware/validateRequest');
 const wasmController = require('../controllers/wasmController');
+const authController = require('../controllers/authController');
 
-/* Public routes */
+// Public routes
 router.get('/', (req, res) => {
   res.json({ message: 'WebForge API' });
 });
 
-/* Protected routes */
+// Authentication routes
+router.post('/login', authController.login);
+router.post('/token', authController.refreshToken);
+router.delete('/logout', authController.logout);
+
+// Protected routes
 router.use(authMiddleware);
 
 router.get('/wasm/modules', wasmController.listModules);
