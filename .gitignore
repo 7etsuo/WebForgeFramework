@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+/frontend/dist/
+/wasm/build/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# IDE Files
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.swp
+
+# Test coverage
+coverage/
+
+# WebAssembly
+*.wasm
+
+# Misc
+*.bak
+*.cache
+
