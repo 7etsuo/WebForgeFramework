@@ -1,19 +1,27 @@
 # WebForge Framework User Documentation
+<p align="center">
+  <img src="https://github.com/7etsuo/WebForgeFramework/assets/90065760/656dcaad-021f-4f29-a5fc-f0dd54af16b1" alt="WebForge Framework">
+</p>
+
+#### Developed by [@7etsuo](https://x.com/7etsuo)
+Join our community on [Discord](https://discord.com/invite/EJDrhVVXjb)!
+
+---
 
 ## Table of Contents
-1. Introduction
-2. Framework Overview
-3. Project Structure
-4. Backend Components
-5. Frontend Setup
-6. WebAssembly Integration
-7. API Reference
-8. Authentication
-9. Database Integration
-10. WebSocket Functionality
-11. Deployment Guide
-12. Troubleshooting
-13. Contributing
+1. [Introduction](#1-introduction)
+2. [Framework Overview](#2-framework-overview)
+3. [Project Structure](#3-project-structure)
+4. [Backend Components](#4-backend-components)
+5. [Frontend Setup](#5-frontend-setup)
+6. [WebAssembly Integration](#6-webassembly-integration)
+7. [API Reference](#7-api-reference)
+8. [Authentication](#8-authentication)
+9. [Database Integration](#9-database-integration)
+10. [WebSocket Functionality](#10-websocket-functionality)
+11. [Deployment Guide](#11-deployment-guide)
+12. [Troubleshooting](#12-troubleshooting)
+13. [Contributing](#13-contributing)
 
 ## 1. Introduction
 
