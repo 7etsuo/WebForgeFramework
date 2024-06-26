@@ -8,10 +8,19 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const WebSocket = require('ws');
+const mongoose = require('mongoose');
 const config = require('./src/config/config');
 const logger = require('./src/utils/logger');
 const errorHandler = require('./src/middleware/errorHandler');
 const addRequestId = require('./src/middleware/addRequestId');
+
+// Connect to MongoDB
+mongoose.connect(config.mongoUri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => logger.info('MongoDB connected successfully'))
+.catch((err) => logger.error('MongoDB connection error:', err));
 
 const app = express();
 
@@ -52,7 +61,7 @@ const apiRoutes = require('./src/routes/apiRoutes');
 app.use('/api', apiRoutes);
 
 // Serve WebAssembly files
-app.use('/wasm', express.static(path.join(__dirname, '..', 'wasm', 'build')));
+app.use('/wasm', express.static(path.join(__dirname, 'wasm', 'build')));
 
 // Error handling middleware
 app.use(errorHandler);
@@ -82,21 +91,9 @@ wss.on('connection', (ws) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 3000;
+const PORT = config.port;
+server.listen(PORT, () => {
+  logger.info(`Server running on port ${PORT} in ${config.nodeEnv} mode`);
+});
 
-function startServer(port = PORT) {
-  return new Promise((resolve) => {
-    const server = app.listen(port, () => {
-      logger.info(`Server running on port ${port} in ${config.nodeEnv} mode`);
-      resolve(server);
-    });
-  });
-}
-
-// Only start the server if this file is run directly
-if (require.main === module) {
-  startServer();
-}
-
-module.exports = { app, startServer };
-
+module.exports = app; // For testing purposes

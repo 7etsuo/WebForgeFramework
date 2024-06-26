@@ -1,67 +1,94 @@
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
-const config = require('../config/config');
+const WebAssemblyModule = require('../models/WebAssemblyModule');
 const logger = require('../utils/logger');
+const fs = require('fs').promises;
+const path = require('path');
 
-// This should be replaced with a database in a real application
-let refreshTokens = [];
-
-exports.login = async (req, res) => {
+exports.listModules = async (req, res, next) => {
   try {
-    const { username, password } = req.body;
-
-    // This is a placeholder. In a real app, you'd fetch the user from a database
-    const user = { id: 1, username: 'testuser', passwordHash: await bcrypt.hash('password', 10) };
-
-    const isValid = await bcrypt.compare(password, user.passwordHash);
-
-    if (!isValid) {
-      logger.warn('Invalid login attempt', { username, requestId: req.id });
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const accessToken = generateAccessToken(user);
-    const refreshToken = jwt.sign(user, config.jwtRefreshSecret, { algorithm: 'HS256' });
-
-    refreshTokens.push(refreshToken);
-
-    logger.info('User logged in successfully', { username, requestId: req.id });
-    res.json({ accessToken, refreshToken });
+    const modules = await WebAssemblyModule.find().select('name description version');
+    logger.info('WebAssembly modules listed', { count: modules.length, requestId: req.id });
+    res.json(modules);
   } catch (error) {
-    logger.error('Login error', { error: error.message, requestId: req.id });
-    res.status(500).json({ error: 'An error occurred during login' });
+    logger.error('Error listing WebAssembly modules', { error: error.message, requestId: req.id });
+    next(error);
   }
 };
 
-exports.refreshToken = (req, res) => {
-  const { token } = req.body;
-  if (!token) {
-    logger.warn('Refresh token missing', { requestId: req.id });
-    return res.status(400).json({ error: 'Refresh token is required' });
-  }
-  if (!refreshTokens.includes(token)) {
-    logger.warn('Invalid refresh token', { requestId: req.id });
-    return res.status(403).json({ error: 'Invalid refresh token' });
-  }
-
-  jwt.verify(token, config.jwtRefreshSecret, { algorithms: ['HS256'] }, (err, user) => {
-    if (err) {
-      logger.warn('Failed to verify refresh token', { error: err.message, requestId: req.id });
-      return res.status(403).json({ error: 'Invalid refresh token' });
+exports.getModule = async (req, res, next) => {
+  try {
+    const module = await WebAssemblyModule.findOne({ name: req.params.name });
+    if (!module) {
+      logger.warn('WebAssembly module not found', { moduleName: req.params.name, requestId: req.id });
+      return res.status(404).json({ error: 'Module not found' });
     }
-    const accessToken = generateAccessToken({ id: user.id, username: user.username });
-    logger.info('Access token refreshed', { username: user.username, requestId: req.id });
-    res.json({ accessToken });
-  });
+    const fileContent = await fs.readFile(module.filePath);
+    logger.info('WebAssembly module retrieved', { moduleName: req.params.name, requestId: req.id });
+    res.type('application/wasm').send(fileContent);
+  } catch (error) {
+    logger.error('Error getting WebAssembly module', { 
+      error: error.message, 
+      moduleName: req.params.name, 
+      requestId: req.id 
+    });
+    next(error);
+  }
 };
 
-exports.logout = (req, res) => {
-  const { token } = req.body;
-  refreshTokens = refreshTokens.filter(t => t !== token);
-  logger.info('User logged out', { requestId: req.id });
-  res.sendStatus(204);
+exports.updateModule = async (req, res, next) => {
+  try {
+    const { name, description, version, content } = req.body;
+    const module = await WebAssemblyModule.findOne({ name: req.params.name });
+    
+    if (!module) {
+      logger.warn('WebAssembly module not found for update', { moduleName: req.params.name, requestId: req.id });
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    module.description = description || module.description;
+    module.version = version || module.version;
+
+    if (content) {
+      await fs.writeFile(module.filePath, Buffer.from(content));
+    }
+
+    await module.save();
+
+    logger.info('WebAssembly module updated', { moduleName: req.params.name, requestId: req.id });
+    res.json({ message: 'Module updated successfully' });
+  } catch (error) {
+    logger.error('Error updating WebAssembly module', { 
+      error: error.message, 
+      moduleName: req.params.name, 
+      requestId: req.id 
+    });
+    next(error);
+  }
 };
 
-function generateAccessToken(user) {
-  return jwt.sign({ id: user.id, username: user.username }, config.jwtAccessSecret, { expiresIn: '15m', algorithm: 'HS256' });
-}
+exports.createModule = async (req, res, next) => {
+  try {
+    const { name, description, version, content } = req.body;
+    const filePath = path.join(__dirname, '..', '..', 'wasm', 'build', `${name}.wasm`);
+
+    await fs.writeFile(filePath, Buffer.from(content));
+
+    const newModule = new WebAssemblyModule({
+      name,
+      description,
+      version,
+      author: req.user.id, // Assuming we have user info from auth middleware
+      filePath
+    });
+
+    await newModule.save();
+
+    logger.info('New WebAssembly module created', { moduleName: name, requestId: req.id });
+    res.status(201).json({ message: 'Module created successfully', module: newModule });
+  } catch (error) {
+    logger.error('Error creating WebAssembly module', { 
+      error: error.message, 
+      requestId: req.id 
+    });
+    next(error);
+  }
+};

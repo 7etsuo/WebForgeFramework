@@ -1,15 +1,20 @@
+const WebAssemblyModule = require('../models/WebAssemblyModule');
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('../utils/logger');
 
 class WebAssemblyService {
   constructor() {
-    this.wasmDir = path.join(__dirname, '..', '..', '..', 'wasm', 'build');
+    this.wasmDir = path.join(__dirname, '..', '..', 'wasm', 'build');
   }
 
   async getModule(moduleName) {
-    const filePath = path.join(this.wasmDir, `${moduleName}.wasm`);
     try {
+      const module = await WebAssemblyModule.findOne({ name: moduleName });
+      if (!module) {
+        throw new Error('Module not found');
+      }
+      const filePath = path.join(this.wasmDir, `${moduleName}.wasm`);
       const buffer = await fs.readFile(filePath);
       return buffer;
     } catch (error) {
@@ -18,10 +23,21 @@ class WebAssemblyService {
     }
   }
 
-  async updateModule(moduleName, newModuleBuffer) {
-    const filePath = path.join(this.wasmDir, `${moduleName}.wasm`);
+  async updateModule(moduleName, newModuleData) {
     try {
-      await fs.writeFile(filePath, newModuleBuffer);
+      const module = await WebAssemblyModule.findOne({ name: moduleName });
+      if (!module) {
+        throw new Error('Module not found');
+      }
+      
+      if (newModuleData.content) {
+        const filePath = path.join(this.wasmDir, `${moduleName}.wasm`);
+        await fs.writeFile(filePath, Buffer.from(newModuleData.content));
+      }
+
+      Object.assign(module, newModuleData);
+      await module.save();
+      
       logger.info(`WebAssembly module ${moduleName} updated successfully`);
     } catch (error) {
       logger.error(`Error updating WebAssembly module ${moduleName}:`, error);
@@ -31,11 +47,32 @@ class WebAssemblyService {
 
   async listModules() {
     try {
-      const files = await fs.readdir(this.wasmDir);
-      return files.filter(file => path.extname(file) === '.wasm');
+      const modules = await WebAssemblyModule.find().select('name description version');
+      return modules;
     } catch (error) {
       logger.error('Error listing WebAssembly modules:', error);
       throw new Error('Failed to list WebAssembly modules');
+    }
+  }
+
+  async createModule(moduleData) {
+    try {
+      const { name, content, ...rest } = moduleData;
+      const filePath = path.join(this.wasmDir, `${name}.wasm`);
+      await fs.writeFile(filePath, Buffer.from(content));
+
+      const newModule = new WebAssemblyModule({
+        name,
+        filePath,
+        ...rest
+      });
+
+      await newModule.save();
+      logger.info(`New WebAssembly module ${name} created successfully`);
+      return newModule;
+    } catch (error) {
+      logger.error('Error creating WebAssembly module:', error);
+      throw new Error('Failed to create WebAssembly module');
     }
   }
 }

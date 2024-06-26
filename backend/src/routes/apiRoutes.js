@@ -1,11 +1,13 @@
 const express = require('express');
-const rateLimit = require('express-rate-limit');
 const router = express.Router();
+const rateLimit = require('express-rate-limit');
+
 const authMiddleware = require('../middleware/authMiddleware');
 const validateRequest = require('../middleware/validateRequest');
 const addRequestId = require('../middleware/addRequestId');
-const wasmController = require('../controllers/wasmController');
+
 const authController = require('../controllers/authController');
+const wasmController = require('../controllers/wasmController');
 
 // Add request ID to all requests
 router.use(addRequestId);
@@ -23,15 +25,16 @@ const authLimiter = rateLimit({
 });
 
 // Authentication routes
+router.post('/register', validateRequest.register, authController.register);
 router.post('/login', validateRequest.login, authController.login);
 router.post('/token', validateRequest.refreshToken, authController.refreshToken);
-router.delete('/logout', validateRequest.logout, authController.logout);
+router.delete('/logout', authMiddleware, authController.logout);
 
-// Protected routes
-router.use(authMiddleware);
-
+// WebAssembly routes (protected)
+router.use('/wasm', authMiddleware);
 router.get('/wasm/modules', wasmController.listModules);
 router.get('/wasm/modules/:name', validateRequest.getModule, wasmController.getModule);
-router.post('/wasm/modules/:name', validateRequest.updateModule, wasmController.updateModule);
+router.post('/wasm/modules', validateRequest.createModule, wasmController.createModule);
+router.put('/wasm/modules/:name', validateRequest.updateModule, wasmController.updateModule);
 
 module.exports = router;
