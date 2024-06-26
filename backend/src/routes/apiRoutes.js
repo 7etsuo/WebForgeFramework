@@ -23,8 +23,8 @@ const authLimiter = rateLimit({
 });
 
 // Authentication routes
-router.post('/login', authLimiter, validateRequest.login, authController.login);
-router.post('/token', authLimiter, validateRequest.refreshToken, authController.refreshToken);
+router.post('/login', validateRequest.login, authController.login);
+router.post('/token', validateRequest.refreshToken, authController.refreshToken);
 router.delete('/logout', validateRequest.logout, authController.logout);
 
 // Protected routes

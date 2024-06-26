@@ -16,14 +16,22 @@ const schemas = {
   }),
   updateModule: Joi.object({
     name: Joi.string().required(),
-    // Add validation for the module buffer
-    moduleBuffer: Joi.binary().required(),
+    // Add validation for the module buffer if needed
   }),
 };
 
 function validateRequest(schema) {
   return (req, res, next) => {
-    const { error } = schema.validate(req.body);
+    let dataToValidate;
+    
+    // Determine which part of the request to validate
+    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+      dataToValidate = req.body;
+    } else if (req.method === 'GET') {
+      dataToValidate = req.params;
+    }
+
+    const { error } = schema.validate(dataToValidate);
     if (error) {
       return res.status(400).json({ error: error.details[0].message });
     }

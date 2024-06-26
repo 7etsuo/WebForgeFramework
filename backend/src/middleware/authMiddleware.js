@@ -10,7 +10,7 @@ function authMiddleware(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(accessToken, config.jwtAccessSecret);
+    const decoded = jwt.verify(accessToken, config.jwtAccessSecret, { algorithms: ['HS256'] });
     req.user = decoded;
     next();
   } catch (error) {
