@@ -8,7 +8,7 @@ describe('Authentication', () => {
   let refreshToken;
 
   beforeAll(async () => {
-    server = await startServer(0); // Use port 0 to let the OS assign a free port
+    server = await startServer(0);
   });
 
   afterAll((done) => {
@@ -66,4 +66,3 @@ describe('Authentication', () => {
     expect(res.statusCode).toEqual(204);
   });
 });
-

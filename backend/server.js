@@ -11,6 +11,7 @@ const WebSocket = require('ws');
 const config = require('./src/config/config');
 const logger = require('./src/utils/logger');
 const errorHandler = require('./src/middleware/errorHandler');
+const addRequestId = require('./src/middleware/addRequestId');
 
 const app = express();
 
@@ -20,10 +21,11 @@ app.use(helmet());
 app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(addRequestId);
 
 // Logging
 app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.url}`);
+  logger.info(`${req.method} ${req.url}`, { requestId: req.id });
   next();
 });
 
@@ -80,9 +82,21 @@ wss.on('connection', (ws) => {
 });
 
 // Start server
-const PORT = config.port;
-server.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT} in ${config.nodeEnv} mode`);
-});
+const PORT = process.env.PORT || 3000;
 
-module.exports = app; // For testing purposes
+function startServer(port = PORT) {
+  return new Promise((resolve) => {
+    const server = app.listen(port, () => {
+      logger.info(`Server running on port ${port} in ${config.nodeEnv} mode`);
+      resolve(server);
+    });
+  });
+}
+
+// Only start the server if this file is run directly
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, startServer };
+
