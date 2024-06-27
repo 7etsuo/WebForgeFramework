@@ -8,19 +8,14 @@ const http = require('http');
 const https = require('https');
 const fs = require('fs');
 const WebSocket = require('ws');
-const mongoose = require('mongoose');
 const config = require('./src/config/config');
 const logger = require('./src/utils/logger');
 const errorHandler = require('./src/middleware/errorHandler');
 const addRequestId = require('./src/middleware/addRequestId');
+const connectDB = require('./src/config/database');
 
 // Connect to MongoDB
-mongoose.connect(config.mongoUri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => logger.info('MongoDB connected successfully'))
-.catch((err) => logger.error('MongoDB connection error:', err));
+connectDB();
 
 const app = express();
 

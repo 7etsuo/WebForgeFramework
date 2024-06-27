@@ -31,7 +31,6 @@ router.delete('/logout', validateRequest.logout, authController.logout);
 // Protected routes
 router.use(authMiddleware);
 
-// WebAssembly routes
 router.get('/wasm/modules', wasmController.listModules);
 router.get('/wasm/modules/:name', validateRequest.getModule, wasmController.getModule);
 router.post('/wasm/modules', validateRequest.createModule, wasmController.createModule);
