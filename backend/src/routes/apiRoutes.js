@@ -2,6 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
+const authorize = require('../middleware/rbac');
 const validateRequest = require('../middleware/validateRequest');
 const addRequestId = require('../middleware/addRequestId');
 const wasmController = require('../controllers/wasmController');
@@ -31,9 +32,10 @@ router.delete('/logout', validateRequest.logout, authController.logout);
 // Protected routes
 router.use(authMiddleware);
 
+// WebAssembly routes
 router.get('/wasm/modules', wasmController.listModules);
 router.get('/wasm/modules/:name', validateRequest.getModule, wasmController.getModule);
-router.post('/wasm/modules', validateRequest.createModule, wasmController.createModule);
-router.put('/wasm/modules/:name', validateRequest.updateModule, wasmController.updateModule);
+router.post('/wasm/modules', authorize('admin'), validateRequest.createModule, wasmController.createModule);
+router.put('/wasm/modules/:name', authorize('admin'), validateRequest.updateModule, wasmController.updateModule);
 
 module.exports = router;

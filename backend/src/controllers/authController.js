@@ -1,19 +1,17 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const config = require('../config/config');
 const logger = require('../utils/logger');
-
-// This should be replaced with a database in a real application
-let refreshTokens = [];
+const User = require('../models/User');
+const RefreshToken = require('../models/RefreshToken');
 
 exports.register = async (req, res) => {
   try {
-    const { username, password } = req.body;
-    // Implementation for user registration
-    // This should create a new user in the database
-    // For example:
-    // const user = new User({ username, password });
-    // await user.save();
+    const { username, password, role } = req.body;
+    const user = new User({ username, password, role: role || 'user' });
+    await user.save();
+    logger.info('User registered successfully', { username, requestId: req.id });
     res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
     logger.error('Registration error:', error);
@@ -24,21 +22,15 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   try {
     const { username, password } = req.body;
+    const user = await User.findOne({ username });
 
-    // This is a placeholder. In a real app, you'd fetch the user from a database
-    const user = { id: 1, username: 'testuser', passwordHash: await bcrypt.hash('password', 10) };
-
-    const isValid = await bcrypt.compare(password, user.passwordHash);
-
-    if (!isValid) {
+    if (!user || !(await user.comparePassword(password))) {
       logger.warn('Invalid login attempt', { username, requestId: req.id });
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const accessToken = generateAccessToken(user);
-    const refreshToken = jwt.sign(user, config.jwtRefreshSecret);
-
-    refreshTokens.push(refreshToken);
+    const refreshToken = await generateRefreshToken(user);
 
     logger.info('User logged in successfully', { username, requestId: req.id });
     res.json({ accessToken, refreshToken });
@@ -48,35 +40,69 @@ exports.login = async (req, res) => {
   }
 };
 
-exports.refreshToken = (req, res) => {
-  const { token } = req.body;
-  if (!token) {
-    logger.warn('Refresh token missing', { requestId: req.id });
-    return res.status(400).json({ error: 'Refresh token is required' });
-  }
-  if (!refreshTokens.includes(token)) {
-    logger.warn('Invalid refresh token', { requestId: req.id });
-    return res.status(403).json({ error: 'Invalid refresh token' });
-  }
+exports.refreshToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      logger.warn('Refresh token missing', { requestId: req.id });
+      return res.status(400).json({ error: 'Refresh token is required' });
+    }
 
-  jwt.verify(token, config.jwtRefreshSecret, (err, user) => {
-    if (err) {
-      logger.warn('Failed to verify refresh token', { error: err.message, requestId: req.id });
+    const refreshToken = await RefreshToken.findOne({ token });
+    if (!refreshToken) {
+      logger.warn('Invalid refresh token', { requestId: req.id });
       return res.status(403).json({ error: 'Invalid refresh token' });
     }
-    const accessToken = generateAccessToken({ id: user.id, username: user.username });
+
+    if (refreshToken.expiryDate < new Date()) {
+      await RefreshToken.deleteOne({ _id: refreshToken._id });
+      logger.warn('Expired refresh token', { requestId: req.id });
+      return res.status(403).json({ error: 'Refresh token expired' });
+    }
+
+    const user = await User.findById(refreshToken.user);
+    if (!user) {
+      logger.warn('User not found for refresh token', { requestId: req.id });
+      return res.status(403).json({ error: 'Invalid refresh token' });
+    }
+
+    const accessToken = generateAccessToken(user);
+    const newRefreshToken = await generateRefreshToken(user);
+
+    // Delete old refresh token
+    await RefreshToken.deleteOne({ _id: refreshToken._id });
+
     logger.info('Access token refreshed', { username: user.username, requestId: req.id });
-    res.json({ accessToken });
-  });
+    res.json({ accessToken, refreshToken: newRefreshToken });
+  } catch (error) {
+    logger.error('Refresh token error', { error: error.message, requestId: req.id });
+    res.status(500).json({ error: 'An error occurred during token refresh' });
+  }
 };
 
-exports.logout = (req, res) => {
-  const { token } = req.body;
-  refreshTokens = refreshTokens.filter(t => t !== token);
-  logger.info('User logged out', { requestId: req.id });
-  res.sendStatus(204);
+exports.logout = async (req, res) => {
+  try {
+    const { token } = req.body;
+    await RefreshToken.deleteOne({ token });
+    logger.info('User logged out', { requestId: req.id });
+    res.sendStatus(204);
+  } catch (error) {
+    logger.error('Logout error', { error: error.message, requestId: req.id });
+    res.status(500).json({ error: 'An error occurred during logout' });
+  }
 };
 
 function generateAccessToken(user) {
-  return jwt.sign({ id: user.id, username: user.username }, config.jwtAccessSecret, { expiresIn: '15m' });
+  return jwt.sign({ id: user._id, username: user.username, role: user.role }, config.jwtAccessSecret, { expiresIn: '15m' });
+}
+
+async function generateRefreshToken(user) {
+  const token = crypto.randomBytes(40).toString('hex');
+  const refreshToken = new RefreshToken({
+    token,
+    user: user._id,
+    expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+  });
+  await refreshToken.save();
+  return token;
 }
