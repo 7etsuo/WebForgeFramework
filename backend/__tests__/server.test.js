@@ -1,15 +1,18 @@
 const request = require('supertest');
-const { app, startServer } = require('../server');
+const { app, startServer, stopServer } = require('../server');
+const mongoose = require('mongoose');
 
 describe('Server', () => {
   let server;
 
   beforeAll(async () => {
-    server = await startServer(0); // Use port 0 to let the OS assign a free port
+    server = await startServer(0);
+    await mongoose.connect(process.env.MONGO_URI_TEST);
   });
 
-  afterAll((done) => {
-    server.close(done);
+  afterAll(async () => {
+    await stopServer(server);
+    await mongoose.disconnect();
   });
 
   it('responds with json', async () => {

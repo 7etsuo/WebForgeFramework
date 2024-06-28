@@ -19,7 +19,11 @@ async function authMiddleware(req, res, next) {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    req.user = user;
+    req.user = {
+      id: user._id,
+      username: user.username,
+      role: user.role
+    };
     next();
   } catch (error) {
     logger.error('Authentication error:', error);

@@ -34,4 +34,3 @@ module.exports = {
   debug: (message, meta) => logWithRequestId('debug', message, meta),
   silly: (message, meta) => logWithRequestId('silly', message, meta),
 };
-

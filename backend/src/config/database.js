@@ -4,7 +4,6 @@ const config = require('./config');
 
 const connectDB = async () => {
   try {
-    // Set strictQuery to true to suppress the warning
     mongoose.set('strictQuery', true);
 
     if (!config.mongoUri) {
@@ -22,4 +21,13 @@ const connectDB = async () => {
   }
 };
 
-module.exports = connectDB;
+const closeDB = async () => {
+  try {
+    await mongoose.connection.close();
+    logger.info('MongoDB connection closed');
+  } catch (error) {
+    logger.error(`Error closing MongoDB connection: ${error.message}`);
+  }
+};
+
+module.exports = { connectDB, closeDB };

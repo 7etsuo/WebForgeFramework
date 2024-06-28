@@ -1,7 +1,10 @@
 const request = require('supertest');
-const { app, startServer } = require('../server');
+const { app, startServer, stopServer } = require('../server');
 const fs = require('fs').promises;
 const path = require('path');
+const mongoose = require('mongoose');
+const User = require('../src/models/User');
+const WebAssemblyModule = require('../src/models/WebAssemblyModule');
 
 describe('Integration Tests', () => {
   let server;
@@ -9,10 +12,34 @@ describe('Integration Tests', () => {
 
   beforeAll(async () => {
     server = await startServer(0);
+    await mongoose.connect(process.env.MONGO_URI_TEST);
   });
 
-  afterAll((done) => {
-    server.close(done);
+  afterAll(async () => {
+    await stopServer(server);
+    await mongoose.disconnect();
+  });
+
+  beforeEach(async () => {
+    await User.deleteMany({});
+    await WebAssemblyModule.deleteMany({});
+    
+    await User.create({
+      username: 'testuser',
+      password: 'password',
+      role: 'user'
+    });
+
+    // Create a sample WebAssembly module
+    const sampleWasmPath = path.join(__dirname, 'dummy.wasm');
+    const sampleWasmContent = await fs.readFile(sampleWasmPath);
+    await WebAssemblyModule.create({
+      name: 'sample',
+      description: 'A sample WebAssembly module',
+      version: '1.0.0',
+      author: 'Test',
+      filePath: sampleWasmPath
+    });
   });
 
   it('should login, fetch WebAssembly modules, and logout', async () => {
@@ -32,7 +59,7 @@ describe('Integration Tests', () => {
 
     expect(modulesResponse.statusCode).toBe(200);
     expect(Array.isArray(modulesResponse.body)).toBeTruthy();
-    expect(modulesResponse.body).toContain('sample.wasm');
+    expect(modulesResponse.body).toContain('sample');
 
     // Logout
     const logoutResponse = await request(app)

@@ -6,16 +6,14 @@ const compression = require('compression');
 const path = require('path');
 const http = require('http');
 const https = require('https');
-const fs = require('fs');
 const WebSocket = require('ws');
 const config = require('./src/config/config');
 const logger = require('./src/utils/logger');
 const errorHandler = require('./src/middleware/errorHandler');
 const addRequestId = require('./src/middleware/addRequestId');
-const connectDB = require('./src/config/database');
-
-// Connect to MongoDB
-connectDB();
+const { connectDB, closeDB } = require('./src/config/database');
+const requestLogger = require('./src/middleware/requestLogger');
+const WasmWatcher = require('./src/services/wasmWatcher');
 
 const app = express();
 
@@ -26,6 +24,7 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(addRequestId);
+app.use(requestLogger);
 
 // Logging
 app.use((req, res, next) => {
@@ -44,13 +43,33 @@ if (config.nodeEnv === 'production') {
   });
 }
 
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+// Global rate limiting
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests from this IP, please try again later.'
 });
-app.use('/api', limiter);
+app.use(globalLimiter);
 
+// More stringent rate limiting for sensitive routes
+if (config.nodeEnv !== 'test') {
+  // Global rate limiting
+  const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: 'Too many requests from this IP, please try again later.'
+  });
+  app.use(globalLimiter);
+
+  // More stringent rate limiting for sensitive routes
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    message: 'Too many login attempts, please try again later.'
+  });
+  app.use('/api/login', authLimiter);
+  app.use('/api/register', authLimiter);
+}
 // Routes
 const apiRoutes = require('./src/routes/apiRoutes');
 app.use('/api', apiRoutes);
@@ -61,34 +80,46 @@ app.use('/wasm', express.static(path.join(__dirname, 'wasm', 'build')));
 // Error handling middleware
 app.use(errorHandler);
 
-// Create HTTP server
-const server = config.nodeEnv === 'production'
-  ? https.createServer({
-      key: fs.readFileSync(path.join(__dirname, 'ssl', 'key.pem')),
-      cert: fs.readFileSync(path.join(__dirname, 'ssl', 'cert.pem'))
-    }, app)
-  : http.createServer(app);
+async function startServer(port = config.port) {
+  await connectDB();
+  return new Promise((resolve) => {
+    const server = app.listen(port, () => {
+      logger.info(`Server running on port ${port} in ${config.nodeEnv} mode`);
+      resolve(server);
+    });
 
-// WebSocket server
-const wss = new WebSocket.Server({ server });
-const wsHandler = require('./src/services/wsHandler');
+    // WebSocket server setup
+    const wss = new WebSocket.Server({ server });
+    const wsHandler = require('./src/services/wsHandler');
 
-wss.on('connection', (ws) => {
-  wsHandler.addClient(ws);
-  
-  ws.on('message', (message) => {
-    wsHandler.handleMessage(message);
+    wss.on('connection', (ws) => {
+      wsHandler.addClient(ws);
+
+      ws.on('message', (message) => {
+        wsHandler.handleMessage(message);
+      });
+
+      ws.on('close', () => {
+        wsHandler.removeClient(ws);
+      });
+    });
+
+    // Start the WebAssembly watcher
+    const wasmDir = path.join(__dirname, '..', 'wasm', 'build');
+    const wasmWatcher = new WasmWatcher(wasmDir);
+    wasmWatcher.start();
   });
+}
 
-  ws.on('close', () => {
-    wsHandler.removeClient(ws);
-  });
-});
+async function stopServer(server) {
+  if (server) {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  await closeDB();
+}
 
-// Start server
-const PORT = config.port;
-server.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT} in ${config.nodeEnv} mode`);
-});
+if (require.main === module) {
+  startServer();
+}
 
-module.exports = app; // For testing purposes
+module.exports = { app, startServer, stopServer };
